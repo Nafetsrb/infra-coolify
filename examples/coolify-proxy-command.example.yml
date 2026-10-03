@@ -1,0 +1,12 @@
+# Lignes à ajouter dans la liste command: du proxy généré par Coolify.
+# Fichier réel sur le serveur : /data/coolify/proxy/docker-compose.yml
+# Ne pas déployer ce fragment. Ne pas remplacer le fichier généré par celui-ci.
+#
+# Ces deux lignes reprennent le protocole PROXY déjà observé :
+# le VPS 10.10.0.1 envoie l'en-tête, la machine privée est 10.10.0.2.
+# Coolify les conserve lors d'une régénération du proxy.
+# Les noms d'entrypoints Coolify sont http et https.
+
+command:
+  - "--entrypoints.http.proxyProtocol.trustedIPs=10.10.0.1/32"
+  - "--entrypoints.https.proxyProtocol.trustedIPs=10.10.0.1/32"

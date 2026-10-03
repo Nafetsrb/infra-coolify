@@ -1,0 +1,10 @@
+# Fichier à créer sur le serveur : /data/coolify/source/docker-compose.custom.yml
+# Puis : sudo bash /data/coolify/source/upgrade.sh
+#
+# Le tableau de bord reste joignable en HTTPS via Traefik.
+# Le port 8000 ne répond plus que sur la machine elle-même.
+
+services:
+  coolify:
+    ports:
+      - "127.0.0.1:8000:8080"

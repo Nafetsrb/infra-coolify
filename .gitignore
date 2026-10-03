@@ -1,0 +1,9 @@
+.env
+.env.*
+*.env
+acme.json
+letsencrypt/
+wg0.conf
+wireguard/
+*.key
+*.pem
