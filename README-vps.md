@@ -73,6 +73,105 @@ UFW n’a pas été activé non plus. S’il l’est un jour, ouvre d’abord le
 
 Le port à retirer plus tard est `8000`. La méthode est dans la section [Garder le tableau de bord sur le HTTPS](#garder-le-tableau-de-bord-sur-le-https), pas dans une règle OVH.
 
+## Changer le port SSH
+
+OVH, dans le guide « How to secure a VPS », fait quitter le port `22` parce que les scans automatiques le visent en premier. Le port de remplacement se choisit entre `49152` et `65535`. Sur ce VPS, c’est `56764`.
+
+Fais ce changement avant d’ouvrir Coolify. Une connexion par clé SSH doit déjà fonctionner. Garde cette session ouverte jusqu’au bout : si le nouveau port ne répond pas, elle permet encore de revenir en arrière. OVH indique le mode rescue du VPS si cette session a été fermée trop tôt.
+
+Le guide fait éditer deux fichiers, puis relancer le socket. Les deux fichiers doivent contenir `56764`. Coolify a affiché « Server is not reachable » quand son formulaire ne visait pas le port réellement ouvert.
+
+### 1. Dire à sshd d’utiliser le nouveau port
+
+```bash
+sudo nano /etc/ssh/sshd_config
+```
+
+Repère ces lignes :
+
+```text
+#Port 22
+#AddressFamily any
+#ListenAddress 0.0.0.0
+```
+
+Retire le `#` devant `Port` et remplace `22` :
+
+```text
+Port 56764
+#AddressFamily any
+#ListenAddress 0.0.0.0
+```
+
+Enregistre et quitte. Ce fichier est celui que lit sshd. Sur Ubuntu 24.04, il ne suffit pas : le port est ouvert par systemd avant que sshd démarre.
+
+### 2. Dire au socket systemd d’ouvrir ce port
+
+```bash
+sudo nano /lib/systemd/system/ssh.socket
+```
+
+Le bloc `[Socket]` ressemble à l’un de ces deux modèles. Dans les deux, chaque `ListenStream` doit porter `56764`. L’exemple OVH laisse parfois `[::]:22` : cette ligne laisserait l’IPv6 sur l’ancien port.
+
+```text
+[Socket]
+ListenStream=56764
+Accept=no
+```
+
+```text
+[Socket]
+ListenStream=0.0.0.0:56764
+ListenStream=[::]:56764
+BindIPv6Only=ipv6-only
+Accept=no
+FreeBind=yes
+```
+
+Enregistre, recharge systemd, puis redémarre le socket. Ce sont les commandes du guide pour Ubuntu 24.04 :
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart ssh.socket
+```
+
+`systemctl restart ssh` ou `systemctl restart sshd`, sans le `daemon-reload` et sans le redémarrage de `ssh.socket`, laisse l’écoute sur `22`. C’est pour ça que sshd peut annoncer un port et que la connexion continue d’arriver sur l’autre.
+
+Si UFW est actif, OVH fait autoriser le nouveau port avant ce redémarrage. Sur ce VPS, UFW n’est pas activé : rien à ouvrir.
+
+### 3. Vérifier sans fermer l’ancienne session
+
+Dans un second terminal, depuis ta machine :
+
+```bash
+ssh -p 56764 ubuntu@141.94.22.25
+```
+
+Cette connexion doit aboutir. Ensuite seulement, ferme l’ancienne session qui passait par le port `22`.
+
+Sur le VPS, les deux contrôles doivent afficher `56764` :
+
+```bash
+sudo sshd -T | grep -i '^port '
+sudo ss -tlnp | grep ssh
+```
+
+`sshd -T` montre le port lu dans `sshd_config`. `ss` montre le port ouvert par `ssh.socket`. S’ils diffèrent, corrige le fichier qui ne contient pas `56764`, relance `daemon-reload` et `restart ssh.socket`, puis reteste.
+
+Si Fail2ban est installé, OVH fait remplacer `port = ssh` par le numéro réel dans `/etc/fail2ban/jail.local`, section `[sshd]`, sinon il surveille encore le port `22` :
+
+```text
+[sshd]
+enabled = true
+port = 56764
+```
+
+Puis :
+
+```bash
+sudo systemctl restart fail2ban
+```
+
 ## Installer Coolify
 
 La méthode officielle recommandée est le script automatique, lancé en root :
@@ -106,8 +205,10 @@ Dans l’assistant, choisis **This machine**. Le bouton **New Server** sert à a
 
 Renseigne :
 
-- le port SSH réellement écouté par le VPS, ici `56764` ;
+- le port `56764`, celui écrit dans `/etc/ssh/sshd_config` et dans `/lib/systemd/system/ssh.socket` ;
 - l’utilisateur `root`.
+
+Si le formulaire garde le port `22`, Coolify dit que le serveur n’est pas atteignable : sshd n’écoute plus là.
 
 Le compte `ubuntu` est proposé par l’image du VPS, et Coolify le marque comme expérimental. Avec cet utilisateur, l’écran peut afficher le serveur comme joignable, puis le proxy reste bloqué sur **Starting**. Le démarrage de Traefik est passé en mettant `root`.
 
